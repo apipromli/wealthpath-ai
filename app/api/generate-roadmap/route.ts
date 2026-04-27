@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    /* Large pool — shuffle so no single model is always hit first (avoids 429 clustering). */
+    /* Large pool — shuffle so load spreads randomly across models. */
     const MODEL_POOL = [
       "openai/gpt-oss-120b:free",
       "openai/gpt-oss-20b:free",
@@ -106,9 +106,8 @@ export async function POST(req: NextRequest) {
       "meta-llama/llama-3.3-70b-instruct:free",
       "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
       "google/gemma-3-12b-it:free",
-      "inclusionai/ling-2.6-flash:free",
-      "tencent/hy3-preview:free",
     ];
+
     /* Fisher-Yates shuffle */
     const MODELS = [...MODEL_POOL];
     for (let i = MODELS.length - 1; i > 0; i--) {
@@ -116,64 +115,90 @@ export async function POST(req: NextRequest) {
       [MODELS[i], MODELS[j]] = [MODELS[j], MODELS[i]];
     }
 
-    let json: Record<string, unknown> | null = null;
+    /* Try at most 6 models to stay well within Vercel's 60s limit. */
+    const CANDIDATES = MODELS.slice(0, 6);
+
+    let roadmap: Record<string, unknown> | null = null;
     let lastError = "";
 
-    for (const model of MODELS) {
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://wealthpath-ai-apipromlis-projects.vercel.app",
-          "X-Title": "WealthPath AI",
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: buildUserPrompt(data) },
-          ],
-          max_tokens: 4096,
-          temperature: 0.7,
-        }),
-      });
+    for (const model of CANDIDATES) {
+      /* Per-request 25s timeout — prevents one slow model from eating the budget. */
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 25000);
 
-      /* Skip to next model if rate-limited or endpoint not found */
-      if (response.status === 429 || response.status === 404) {
-        lastError = `${model} unavailable (${response.status})`;
+      try {
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          signal: controller.signal,
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://wealthpath-ai-apipromlis-projects.vercel.app",
+            "X-Title": "WealthPath AI",
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              { role: "user", content: buildUserPrompt(data) },
+            ],
+            max_tokens: 4096,
+            temperature: 0.7,
+          }),
+        });
+
+        /* Skip rate-limited or missing models */
+        if (response.status === 429 || response.status === 404) {
+          lastError = `${model} unavailable (${response.status})`;
+          continue;
+        }
+
+        if (!response.ok) {
+          lastError = `${model} error ${response.status}`;
+          continue;
+        }
+
+        const json = await response.json() as Record<string, unknown>;
+        const rawText: string =
+          (json.choices as Array<{ message: { content: string } }>)?.[0]?.message?.content ?? "";
+
+        if (!rawText) { lastError = `${model} returned empty content`; continue; }
+
+        /* Strip markdown fences and extract JSON */
+        const cleaned = rawText
+          .replace(/^```json\s*/i, "")
+          .replace(/^```\s*/i, "")
+          .replace(/```\s*$/i, "")
+          .trim();
+
+        /* Find the JSON object even if the model added preamble text */
+        const jsonStart = cleaned.indexOf("{");
+        const jsonEnd = cleaned.lastIndexOf("}");
+        if (jsonStart === -1 || jsonEnd === -1) {
+          lastError = `${model} did not return JSON`;
+          continue;
+        }
+
+        try {
+          roadmap = JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1));
+          break; /* success */
+        } catch {
+          lastError = `${model} returned malformed JSON`;
+          continue;
+        }
+      } catch (fetchErr) {
+        lastError = `${model} timed out or network error`;
         continue;
+      } finally {
+        clearTimeout(timer);
       }
-
-      if (!response.ok) {
-        const errBody = await response.text();
-        lastError = `${model} error ${response.status}: ${errBody}`;
-        continue;
-      }
-
-      json = await response.json();
-      break;
     }
 
-    if (!json) {
+    if (!roadmap) {
       throw new Error(
         "AI servers are currently busy — please try again in about a minute."
       );
     }
-
-    const rawText: string =
-      (json.choices as Array<{ message: { content: string } }>)?.[0]?.message?.content ?? "";
-
-    if (!rawText) throw new Error("Empty response from AI model");
-
-    // Strip markdown code fences if present
-    const cleaned = rawText
-      .replace(/^```json\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/```\s*$/i, "")
-      .trim();
-
-    const roadmap = JSON.parse(cleaned);
 
     return NextResponse.json({ success: true, roadmap });
   } catch (error: unknown) {
