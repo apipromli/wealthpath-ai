@@ -90,12 +90,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    /* Try models in order — skip to next on 429 rate-limit. */
+    /* Try models in order — skip on 429 (rate-limit) or 404 (unavailable). */
     const MODELS = [
-      "deepseek/deepseek-chat-v3-0324:free",
-      "google/gemma-3-27b-it:free",
+      "deepseek/deepseek-r1:free",
       "meta-llama/llama-3.3-70b-instruct:free",
-      "mistralai/mistral-small-3.1-24b-instruct:free",
+      "google/gemma-2-9b-it:free",
+      "mistralai/mistral-7b-instruct:free",
+      "meta-llama/llama-3.1-8b-instruct:free",
     ];
 
     let json: Record<string, unknown> | null = null;
@@ -121,21 +122,23 @@ export async function POST(req: NextRequest) {
         }),
       });
 
-      if (response.status === 429) {
-        lastError = `${model} rate-limited`;
-        continue; // try next model
+      /* Skip to next model if rate-limited or endpoint not found */
+      if (response.status === 429 || response.status === 404) {
+        lastError = `${model} unavailable (${response.status})`;
+        continue;
       }
 
       if (!response.ok) {
         const errBody = await response.text();
-        throw new Error(`OpenRouter error ${response.status}: ${errBody}`);
+        lastError = `${model} error ${response.status}: ${errBody}`;
+        continue; // try next instead of throwing
       }
 
       json = await response.json();
-      break; // success
+      break; // success — stop trying
     }
 
-    if (!json) throw new Error(`All models rate-limited. ${lastError}`);
+    if (!json) throw new Error(`All models unavailable. Last: ${lastError}`);
 
     const rawText: string =
       (json.choices as Array<{ message: { content: string } }>)?.[0]?.message?.content ?? "";
