@@ -71,24 +71,72 @@ function buildUserPrompt(data: RoadmapInput): string {
 Output only valid JSON. No markdown, no extra text. Start your response with { and end with }.`;
 }
 
-type ModelCandidate = { url: string; model: string; authHeader: string };
-
-function parseRoadmap(rawText: string): Record<string, unknown> | null {
+function extractRoadmap(rawText: string): Record<string, unknown> | null {
   const cleaned = rawText
     .replace(/^```json\s*/i, "")
     .replace(/^```\s*/i, "")
     .replace(/```\s*$/i, "")
     .trim();
-
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
   if (start === -1 || end === -1) return null;
-
   try {
     return JSON.parse(cleaned.slice(start, end + 1));
   } catch {
     return null;
   }
+}
+
+/* Call native Gemini API (generativelanguage.googleapis.com) */
+async function callGemini(
+  model: string,
+  apiKey: string,
+  userPrompt: string,
+  signal: AbortSignal
+): Promise<string | null> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const res = await fetch(url, {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      generationConfig: { maxOutputTokens: 4096, temperature: 0.7 },
+    }),
+  });
+  if (res.status === 429 || res.status === 404 || !res.ok) return null;
+  const json = await res.json() as Record<string, unknown>;
+  return (json.candidates as Array<{ content: { parts: Array<{ text: string }> } }>)
+    ?.[0]?.content?.parts?.[0]?.text ?? null;
+}
+
+/* Call OpenAI-compatible APIs (OpenRouter, Groq) */
+async function callOpenAICompat(
+  url: string,
+  model: string,
+  authHeader: string,
+  extraHeaders: Record<string, string>,
+  userPrompt: string,
+  signal: AbortSignal
+): Promise<string | null> {
+  const res = await fetch(url, {
+    method: "POST",
+    signal,
+    headers: { Authorization: authHeader, "Content-Type": "application/json", ...extraHeaders },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userPrompt },
+      ],
+      max_tokens: 4096,
+      temperature: 0.7,
+    }),
+  });
+  if (res.status === 429 || res.status === 404 || !res.ok) return null;
+  const json = await res.json() as Record<string, unknown>;
+  return (json.choices as Array<{ message: { content: string } }>)?.[0]?.message?.content ?? null;
 }
 
 export async function POST(req: NextRequest) {
@@ -107,135 +155,71 @@ export async function POST(req: NextRequest) {
     const openrouterKey = process.env.OPENROUTER_API_KEY;
 
     if (!googleKey && !groqKey && !openrouterKey) {
-      return NextResponse.json(
-        { error: "No AI API key configured on the server." },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "No AI API key configured." }, { status: 500 });
     }
 
-    /* Build candidate list: Google Gemini first, then Groq, then OpenRouter */
-    const candidates: ModelCandidate[] = [];
+    const userPrompt = buildUserPrompt(data);
+    let roadmap: Record<string, unknown> | null = null;
 
-    if (googleKey) {
-      for (const model of [
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-8b",
-      ]) {
-        candidates.push({
-          url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-          model,
-          authHeader: `Bearer ${googleKey}`,
-        });
+    /* ── 1. Try Google Gemini (fastest + most reliable free tier) ── */
+    if (googleKey && !roadmap) {
+      for (const model of ["gemini-2.5-flash", "gemma-3-27b-it", "gemma-3-12b-it"]) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 20000);
+        try {
+          const text = await callGemini(model, googleKey, userPrompt, controller.signal);
+          if (text) { roadmap = extractRoadmap(text); if (roadmap) break; }
+        } catch { /* timeout or network — try next */ }
+        finally { clearTimeout(timer); }
       }
     }
 
-    if (groqKey) {
-      for (const model of [
-        "llama-3.3-70b-versatile",
-        "llama3-70b-8192",
-        "gemma2-9b-it",
-      ]) {
-        candidates.push({
-          url: "https://api.groq.com/openai/v1/chat/completions",
-          model,
-          authHeader: `Bearer ${groqKey}`,
-        });
+    /* ── 2. Try Groq ── */
+    if (groqKey && !roadmap) {
+      for (const model of ["llama-3.3-70b-versatile", "llama3-70b-8192", "gemma2-9b-it"]) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 20000);
+        try {
+          const text = await callOpenAICompat(
+            "https://api.groq.com/openai/v1/chat/completions",
+            model, `Bearer ${groqKey}`, {}, userPrompt, controller.signal
+          );
+          if (text) { roadmap = extractRoadmap(text); if (roadmap) break; }
+        } catch { /* timeout */ }
+        finally { clearTimeout(timer); }
       }
     }
 
-    if (openrouterKey) {
+    /* ── 3. OpenRouter fallback ── */
+    if (openrouterKey && !roadmap) {
       const OR_POOL = [
-        "openai/gpt-oss-120b:free",
-        "openai/gpt-oss-20b:free",
-        "google/gemma-4-31b-it:free",
-        "nvidia/nemotron-3-super-120b-a12b:free",
-        "qwen/qwen3-next-80b-a3b-instruct:free",
-        "google/gemma-3-27b-it:free",
-        "nousresearch/hermes-3-llama-3.1-405b:free",
+        "openai/gpt-oss-120b:free", "openai/gpt-oss-20b:free",
+        "google/gemma-4-31b-it:free", "qwen/qwen3-next-80b-a3b-instruct:free",
+        "google/gemma-3-27b-it:free", "nousresearch/hermes-3-llama-3.1-405b:free",
         "meta-llama/llama-3.3-70b-instruct:free",
-        "google/gemma-3-12b-it:free",
       ];
       for (let i = OR_POOL.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [OR_POOL[i], OR_POOL[j]] = [OR_POOL[j], OR_POOL[i]];
       }
       for (const model of OR_POOL.slice(0, 4)) {
-        candidates.push({
-          url: "https://openrouter.ai/api/v1/chat/completions",
-          model,
-          authHeader: `Bearer ${openrouterKey}`,
-        });
-      }
-    }
-
-    let roadmap: Record<string, unknown> | null = null;
-    let lastError = "";
-
-    for (const { url, model, authHeader } of candidates) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 20000);
-
-      try {
-        const extraHeaders: Record<string, string> = url.includes("openrouter")
-          ? {
-              "HTTP-Referer": "https://wealthpath-ai-apipromlis-projects.vercel.app",
-              "X-Title": "WealthPath AI",
-            }
-          : {}; /* Google & Groq need no extra headers */
-
-        const response = await fetch(url, {
-          method: "POST",
-          signal: controller.signal,
-          headers: {
-            Authorization: authHeader,
-            "Content-Type": "application/json",
-            ...extraHeaders,
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: "system", content: SYSTEM_PROMPT },
-              { role: "user", content: buildUserPrompt(data) },
-            ],
-            max_tokens: 4096,
-            temperature: 0.7,
-          }),
-        });
-
-        if (response.status === 429 || response.status === 404) {
-          lastError = `${model} unavailable (${response.status})`;
-          continue;
-        }
-
-        if (!response.ok) {
-          lastError = `${model} error ${response.status}`;
-          continue;
-        }
-
-        const json = await response.json() as Record<string, unknown>;
-        const rawText: string =
-          (json.choices as Array<{ message: { content: string } }>)?.[0]?.message?.content ?? "";
-
-        if (!rawText) { lastError = `${model} empty response`; continue; }
-
-        const parsed = parseRoadmap(rawText);
-        if (!parsed) { lastError = `${model} returned invalid JSON`; continue; }
-
-        roadmap = parsed;
-        break;
-      } catch {
-        lastError = `${model} timed out`;
-        continue;
-      } finally {
-        clearTimeout(timer);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 18000);
+        try {
+          const text = await callOpenAICompat(
+            "https://openrouter.ai/api/v1/chat/completions",
+            model, `Bearer ${openrouterKey}`,
+            { "HTTP-Referer": "https://wealthpath-ai-apipromlis-projects.vercel.app", "X-Title": "WealthPath AI" },
+            userPrompt, controller.signal
+          );
+          if (text) { roadmap = extractRoadmap(text); if (roadmap) break; }
+        } catch { /* timeout */ }
+        finally { clearTimeout(timer); }
       }
     }
 
     if (!roadmap) {
-      throw new Error(
-        "AI servers are currently busy — please try again in about a minute."
-      );
+      throw new Error("AI servers are currently busy — please try again in about a minute.");
     }
 
     return NextResponse.json({ success: true, roadmap });
