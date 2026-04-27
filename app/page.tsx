@@ -6,7 +6,8 @@ import {
   ArrowRight, Sparkles, TrendingUp, Target, Calendar,
   CheckCircle2, Loader2, Compass, Moon, Sun,
   Copy, Check, Printer, ChevronDown, ChevronUp,
-  ArrowUp, BarChart3, Wallet, Shield,
+  ArrowUp, BarChart3, Wallet, Shield, MapPin, Zap,
+  Users, Star, HelpCircle, ChevronRight,
 } from "lucide-react";
 
 /* ─── TYPES ─────────────────────────────────────────────── */
@@ -237,6 +238,43 @@ function IDRField({
           className="w-full pl-10 pr-4 py-3 bg-cream dark:bg-dark-surface border border-midnight/15 dark:border-cream/10 rounded-xl text-midnight dark:text-cream placeholder:text-midnight/35 dark:placeholder:text-cream/25 focus:outline-none focus:border-royal-gold focus:ring-2 focus:ring-royal-gold/20 transition-all text-sm"
         />
       </div>
+    </div>
+  );
+}
+
+/* ─── FAQ ITEM ──────────────────────────────────────────── */
+function FAQItem({ question, answer }: { question: string; answer: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border border-midnight/8 dark:border-cream/8 rounded-2xl overflow-hidden bg-white dark:bg-dark-surface">
+      <button
+        onClick={() => setOpen((p) => !p)}
+        className="w-full flex items-center justify-between gap-4 px-6 py-4 text-left hover:bg-cream/50 dark:hover:bg-dark-card/50 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <HelpCircle className="w-4 h-4 text-royal-gold flex-shrink-0" />
+          <span className="font-medium text-midnight dark:text-cream text-sm">{question}</span>
+        </div>
+        {open ? (
+          <ChevronUp className="w-4 h-4 text-midnight/40 dark:text-cream/40 flex-shrink-0" />
+        ) : (
+          <ChevronDown className="w-4 h-4 text-midnight/40 dark:text-cream/40 flex-shrink-0" />
+        )}
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1, transition: { duration: 0.25, ease: [0.22, 1, 0.36, 1] } }}
+            exit={{ height: 0, opacity: 0, transition: { duration: 0.18 } }}
+            className="overflow-hidden"
+          >
+            <div className="px-6 pb-5 pt-1 text-sm text-midnight/60 dark:text-cream/50 leading-relaxed border-t border-midnight/5 dark:border-cream/5 ml-7">
+              {answer}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -541,19 +579,19 @@ export default function Home() {
                       icon: Wallet,
                       step: "01",
                       title: "Share your numbers",
-                      desc: "Income, expenses, savings, and your biggest financial goal.",
+                      desc: "Income, expenses, savings, and your biggest financial goal. Takes under 2 minutes.",
                     },
                     {
                       icon: Sparkles,
                       step: "02",
                       title: "AI builds your plan",
-                      desc: "Claude analyzes your situation and crafts a 4-phase, 12-month roadmap.",
+                      desc: "AI analyzes your situation and crafts a 4-phase, 12-month roadmap personalized to you.",
                     },
                     {
                       icon: Shield,
                       step: "03",
                       title: "Execute with confidence",
-                      desc: "Follow weekly tasks, hit milestones, and track your progress.",
+                      desc: "Follow weekly tasks, hit milestones, and track your progress toward financial freedom.",
                     },
                   ].map((item, i) => (
                     <div key={i} className="relative">
@@ -575,6 +613,281 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+
+            {/* WHAT YOU GET */}
+            <div className="bg-midnight py-24 px-6 relative overflow-hidden">
+              <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute top-0 left-1/4 w-96 h-96 bg-royal-gold/5 rounded-full blur-3xl" />
+                <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-royal-gold/3 rounded-full blur-3xl" />
+              </div>
+              <div className="max-w-5xl mx-auto relative">
+                <div className="text-center mb-14">
+                  <span className="text-xs tracking-widest text-royal-gold uppercase">Deliverable</span>
+                  <h2 className="font-display text-4xl font-bold mt-2 text-cream">
+                    What&apos;s inside your roadmap
+                  </h2>
+                  <p className="text-cream/50 mt-3 max-w-xl mx-auto text-sm leading-relaxed">
+                    Not a generic template. A structured strategic plan built from your exact numbers.
+                  </p>
+                </div>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {[
+                    {
+                      icon: Target,
+                      title: "Wealth Archetypes",
+                      desc: "Know where you stand today and who you'll become in 12 months.",
+                      badge: "Identity",
+                    },
+                    {
+                      icon: MapPin,
+                      title: "4 Strategic Phases",
+                      desc: "Foundation → Acceleration → Compound Growth → Strategic Expansion.",
+                      badge: "Structure",
+                    },
+                    {
+                      icon: TrendingUp,
+                      title: "IDR Milestones",
+                      desc: "Concrete Rupiah targets with specific deadlines — no vague goals.",
+                      badge: "Precision",
+                    },
+                    {
+                      icon: Calendar,
+                      title: "Weekly Action Tasks",
+                      desc: "3–4 achievable tasks per phase, designed for 1–3 hours per week.",
+                      badge: "Execution",
+                    },
+                    {
+                      icon: Zap,
+                      title: "AI Insights",
+                      desc: "Personalized commentary that references your actual income, age, and goal.",
+                      badge: "Intelligence",
+                    },
+                    {
+                      icon: BarChart3,
+                      title: "Key Metrics Dashboard",
+                      desc: "Monthly savings target, projected net worth, and risk assessment.",
+                      badge: "Analytics",
+                    },
+                  ].map((item, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: i * 0.06, duration: 0.4 }}
+                      className="bg-cream/5 border border-cream/10 rounded-2xl p-6 hover:border-royal-gold/30 hover:bg-cream/8 transition-all duration-200"
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="w-10 h-10 rounded-xl bg-royal-gold/10 flex items-center justify-center">
+                          <item.icon className="w-5 h-5 text-royal-gold" />
+                        </div>
+                        <span className="text-[10px] tracking-widest text-royal-gold/60 uppercase">{item.badge}</span>
+                      </div>
+                      <h3 className="font-display text-lg font-semibold text-cream mb-2">{item.title}</h3>
+                      <p className="text-cream/50 text-sm leading-relaxed">{item.desc}</p>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* BUILT FOR INDONESIA */}
+            <div className="bg-cream dark:bg-dark-bg py-24 px-6">
+              <div className="max-w-5xl mx-auto">
+                <div className="grid md:grid-cols-2 gap-12 items-center">
+                  <div>
+                    <span className="text-xs tracking-widest text-royal-gold uppercase">Local Context</span>
+                    <h2 className="font-display text-4xl font-bold mt-2 mb-4 text-midnight dark:text-cream leading-tight">
+                      Built for Indonesian professionals
+                    </h2>
+                    <p className="text-midnight/60 dark:text-cream/50 text-base leading-relaxed mb-6">
+                      Every recommendation is grounded in the Indonesian financial landscape — not copied from US-centric templates.
+                      The AI thinks in Rupiah and knows where to put your money.
+                    </p>
+                    <div className="space-y-3">
+                      {[
+                        { label: "All amounts in IDR (Indonesian Rupiah)", icon: "🇮🇩" },
+                        { label: "References Bibit, Bareksa & Pluang for investing", icon: "📈" },
+                        { label: "Mentions BCA, Mandiri & local banking", icon: "🏦" },
+                        { label: "Accounts for IDX stocks & Reksadana", icon: "💹" },
+                        { label: "Understands Indonesian income & expense reality", icon: "✅" },
+                      ].map((item, i) => (
+                        <div key={i} className="flex items-center gap-3 text-sm text-midnight/70 dark:text-cream/60">
+                          <span className="text-base">{item.icon}</span>
+                          {item.label}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-midnight to-deep-sea rounded-3xl p-8 text-cream relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-royal-gold/10 rounded-full blur-2xl" />
+                    <div className="text-[11px] tracking-widest text-royal-gold uppercase mb-4">Sample Archetype</div>
+                    <div className="font-display text-2xl font-bold text-cream mb-2">The Ambitious Builder</div>
+                    <div className="text-cream/50 text-sm mb-6">25 yo · Software Developer · Jakarta</div>
+                    <div className="space-y-3">
+                      {[
+                        { label: "Monthly Savings Target", value: "Rp 3.500.000" },
+                        { label: "12-Month Goal", value: "Rp 50.000.000" },
+                        { label: "Risk Level", value: "Moderate-Aggressive" },
+                      ].map((m, i) => (
+                        <div key={i} className="flex items-center justify-between border-b border-cream/8 pb-3">
+                          <span className="text-cream/50 text-xs">{m.label}</span>
+                          <span className="text-royal-gold font-semibold text-sm">{m.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-6 pt-4 flex items-start gap-3">
+                      <Sparkles className="w-4 h-4 text-royal-gold flex-shrink-0 mt-0.5" />
+                      <p className="text-cream/60 text-xs leading-relaxed italic">
+                        &quot;Prioritaskan Bibit Reksa Dana Pasar Uang untuk dana darurat 3 bulan dulu,
+                        baru alihkan ke Saham IDX Blue Chip…&quot;
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* TESTIMONIALS / SAMPLE PROFILES */}
+            <div className="bg-cream dark:bg-dark-bg border-t border-midnight/5 dark:border-cream/5 py-20 px-6">
+              <div className="max-w-5xl mx-auto">
+                <div className="text-center mb-12">
+                  <span className="text-xs tracking-widest text-royal-gold uppercase">Who It&apos;s For</span>
+                  <h2 className="font-display text-4xl font-bold mt-2 text-midnight dark:text-cream">
+                    Every financial starting point
+                  </h2>
+                  <p className="text-midnight/50 dark:text-cream/40 mt-2 text-sm">
+                    WealthPath AI adapts to where you are, not where a template says you should be.
+                  </p>
+                </div>
+                <div className="grid md:grid-cols-3 gap-6">
+                  {[
+                    {
+                      emoji: "🧑‍💼",
+                      name: "Fresh Graduate",
+                      income: "Rp 5–8 jt/bln",
+                      goal: "Emergency fund + first investment",
+                      archetype: "The Cautious Starter",
+                    },
+                    {
+                      emoji: "👩‍💻",
+                      name: "Mid-Career Professional",
+                      income: "Rp 12–20 jt/bln",
+                      goal: "Down payment rumah",
+                      archetype: "The Ambitious Builder",
+                    },
+                    {
+                      emoji: "🧑‍🍳",
+                      name: "Freelancer / UMKM",
+                      income: "Rp 8–25 jt/bln",
+                      goal: "Modal usaha & diversifikasi",
+                      archetype: "The Independent Grower",
+                    },
+                  ].map((p, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: i * 0.08, duration: 0.4 }}
+                      className="bg-white dark:bg-dark-surface border border-midnight/8 dark:border-cream/8 rounded-2xl p-6 card-hover"
+                    >
+                      <div className="text-3xl mb-4">{p.emoji}</div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Star className="w-3 h-3 text-royal-gold" />
+                        <span className="text-xs text-royal-gold font-medium tracking-wide">{p.archetype}</span>
+                      </div>
+                      <h3 className="font-display text-lg font-bold text-midnight dark:text-cream mb-3">{p.name}</h3>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center gap-2 text-midnight/60 dark:text-cream/50">
+                          <Wallet className="w-3.5 h-3.5 text-royal-gold/60" />
+                          {p.income}
+                        </div>
+                        <div className="flex items-center gap-2 text-midnight/60 dark:text-cream/50">
+                          <Target className="w-3.5 h-3.5 text-royal-gold/60" />
+                          {p.goal}
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* FAQ */}
+            <div className="bg-cream dark:bg-dark-bg border-t border-midnight/5 dark:border-cream/5 py-24 px-6">
+              <div className="max-w-3xl mx-auto">
+                <div className="text-center mb-14">
+                  <span className="text-xs tracking-widest text-royal-gold uppercase">FAQ</span>
+                  <h2 className="font-display text-4xl font-bold mt-2 text-midnight dark:text-cream">
+                    Common questions
+                  </h2>
+                </div>
+                <div className="space-y-4">
+                  {[
+                    {
+                      q: "Apakah ini benar-benar gratis?",
+                      a: "Ya, 100% gratis. Tidak perlu daftar akun, tidak ada biaya tersembunyi. Masukkan data, dapatkan roadmap.",
+                    },
+                    {
+                      q: "Seberapa akurat roadmap yang dihasilkan?",
+                      a: "Roadmap dibangun langsung dari angka yang kamu berikan. Semakin akurat datamu, semakin relevan hasilnya. AI menggunakan konteks Indonesia (IDR, platform lokal) untuk menjaga relevansi.",
+                    },
+                    {
+                      q: "Apakah data keuangan saya aman?",
+                      a: "Data hanya digunakan untuk menghasilkan roadmap dan tidak disimpan di server kami. Setiap sesi adalah fresh request yang langsung diproses AI.",
+                    },
+                    {
+                      q: "Berapa lama proses pembuatan roadmap?",
+                      a: "Rata-rata 15–30 detik. Kamu akan melihat progress AI secara real-time selama prosesnya berlangsung.",
+                    },
+                    {
+                      q: "Bisakah saya membuat roadmap lebih dari sekali?",
+                      a: "Ya, kamu bisa generate ulang kapan saja — misalnya ketika situasi keuanganmu berubah atau ingin mencoba skenario berbeda.",
+                    },
+                  ].map((faq, i) => (
+                    <FAQItem key={i} question={faq.q} answer={faq.a} />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* FINAL CTA */}
+            <div className="bg-gradient-to-br from-midnight via-deep-sea to-midnight py-24 px-6 relative overflow-hidden">
+              <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-royal-gold/8 rounded-full blur-3xl" />
+              </div>
+              <div className="max-w-2xl mx-auto text-center relative">
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5 }}
+                >
+                  <Users className="w-8 h-8 text-royal-gold mx-auto mb-6" />
+                  <h2 className="font-display text-4xl md:text-5xl font-bold text-cream mb-4 leading-tight">
+                    Your 12-month roadmap is{" "}
+                    <span className="gradient-text italic">waiting.</span>
+                  </h2>
+                  <p className="text-cream/60 text-lg mb-8 leading-relaxed">
+                    Stop postponing your financial future. It takes 2 minutes.
+                    The roadmap takes 30 seconds. The clarity is permanent.
+                  </p>
+                  <motion.button
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.96 }}
+                    onClick={() => setStep("form")}
+                    className="group inline-flex items-center gap-3 px-10 py-5 bg-royal-gold text-midnight font-semibold rounded-full hover:bg-bright-gold transition-colors gold-glow text-lg"
+                  >
+                    Build My Roadmap — Free
+                    <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </motion.button>
+                  <p className="text-cream/30 text-xs mt-4">
+                    No account · No credit card · No BS
+                  </p>
+                </motion.div>
               </div>
             </div>
           </motion.section>
@@ -1025,12 +1338,29 @@ export default function Home() {
       </AnimatePresence>
 
       {/* ── FOOTER ── */}
-      <footer className="border-t border-midnight/8 dark:border-cream/8 py-10 px-6 text-center bg-cream dark:bg-dark-bg transition-colors">
-        <div className="max-w-4xl mx-auto flex flex-col items-center gap-4">
-          <Logo />
-          <p className="text-sm text-midnight/50 dark:text-cream/40">
-            Powered by Claude AI · Built for Wealthypeople.id Stage 2
-          </p>
+      <footer className="border-t border-midnight/8 dark:border-cream/8 py-12 px-6 bg-cream dark:bg-dark-bg transition-colors">
+        <div className="max-w-5xl mx-auto">
+          <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-8 mb-8">
+            <div className="flex flex-col items-center md:items-start gap-3">
+              <Logo />
+              <p className="text-sm text-midnight/50 dark:text-cream/40 max-w-xs text-center md:text-left leading-relaxed">
+                Your wealth journey, mapped in seconds. AI-powered financial roadmaps for Indonesian professionals.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-x-16 gap-y-2 text-sm text-midnight/50 dark:text-cream/40">
+              <div className="font-medium text-midnight/70 dark:text-cream/60 mb-1 col-span-2 md:col-span-1">Features</div>
+              <div>12-Month Roadmap</div>
+              <div>Wealth Archetypes</div>
+              <div>IDR Milestones</div>
+              <div>Weekly Action Plan</div>
+              <div>AI Insights</div>
+              <div>Print & Export</div>
+            </div>
+          </div>
+          <div className="border-t border-midnight/8 dark:border-cream/8 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-midnight/35 dark:text-cream/25">
+            <span>© 2026 WealthPath AI. Built with Next.js &amp; AI.</span>
+            <span>Untuk profesional muda Indonesia 🇮🇩</span>
+          </div>
         </div>
       </footer>
 

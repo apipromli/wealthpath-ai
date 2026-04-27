@@ -92,11 +92,12 @@ export async function POST(req: NextRequest) {
 
     /* Try models in order — skip on 429 (rate-limit) or 404 (unavailable). */
     const MODELS = [
-      "deepseek/deepseek-r1:free",
+      "google/gemma-4-31b-it:free",
+      "qwen/qwen3-next-80b-a3b-instruct:free",
+      "google/gemma-3-27b-it:free",
+      "nousresearch/hermes-3-llama-3.1-405b:free",
       "meta-llama/llama-3.3-70b-instruct:free",
-      "google/gemma-2-9b-it:free",
-      "mistralai/mistral-7b-instruct:free",
-      "meta-llama/llama-3.1-8b-instruct:free",
+      "meta-llama/llama-3.2-3b-instruct:free",
     ];
 
     let json: Record<string, unknown> | null = null;
