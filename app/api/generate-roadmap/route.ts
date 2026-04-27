@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
       headers: {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://wealthpath-fc5ypi9o4-apipromlis-projects.vercel.app",
+        "HTTP-Referer": "https://wealthpath-ai-apipromlis-projects.vercel.app",
         "X-Title": "WealthPath AI",
       },
       body: JSON.stringify({
