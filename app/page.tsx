@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { motion, AnimatePresence, useInView, useSpring, useTransform } from "framer-motion";
 import {
   ArrowRight, Sparkles, TrendingUp, Target, Calendar,
   CheckCircle2, Loader2, Compass, Moon, Sun,
@@ -91,9 +91,9 @@ const LOADING_STEPS = [
 ];
 
 const STATS = [
-  { value: "4 Phases", label: "Structured Journey", icon: Target },
-  { value: "12 Months", label: "Clear Roadmap", icon: Calendar },
-  { value: "AI-Powered", label: "Personalized Advice", icon: Sparkles },
+  { to: 4, suffix: " Phases", label: "Structured Journey", icon: Target },
+  { to: 12, suffix: " Months", label: "Clear Roadmap", icon: Calendar },
+  { to: 30, suffix: "s", label: "Avg. Generation Time", icon: Sparkles },
 ];
 
 /* ─── LOGO ──────────────────────────────────────────────── */
@@ -241,6 +241,133 @@ function IDRField({
     </div>
   );
 }
+
+/* ─── ANIMATED COUNTER ──────────────────────────────────── */
+function AnimatedCounter({ to, suffix = "", prefix = "" }: { to: number; suffix?: string; prefix?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-50px" });
+  const spring = useSpring(0, { stiffness: 60, damping: 20 });
+  const display = useTransform(spring, (v) => `${prefix}${Math.round(v).toLocaleString("id-ID")}${suffix}`);
+
+  useEffect(() => {
+    if (inView) spring.set(to);
+  }, [inView, spring, to]);
+
+  return <motion.span ref={ref}>{display}</motion.span>;
+}
+
+/* ─── HERO CHART ─────────────────────────────────────────── */
+const HeroChart = () => (
+  <div className="relative w-full max-w-md mx-auto h-56 mt-10 mb-4">
+    <svg viewBox="0 0 320 160" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-xl">
+      <defs>
+        <linearGradient id="chartGold" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#D4AF37" stopOpacity="0.6" />
+          <stop offset="100%" stopColor="#FFD700" />
+        </linearGradient>
+        <linearGradient id="chartFill" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#D4AF37" stopOpacity="0.15" />
+          <stop offset="100%" stopColor="#D4AF37" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {/* Grid lines */}
+      {[40, 80, 120].map((y) => (
+        <line key={y} x1="20" y1={y} x2="300" y2={y} stroke="rgba(255,255,255,0.06)" strokeWidth="1" strokeDasharray="4 4" />
+      ))}
+      {/* Fill under curve */}
+      <motion.path
+        d="M 20 140 C 60 130, 90 115, 120 100 S 180 70, 220 50 S 270 25, 295 15 L 295 145 Z"
+        fill="url(#chartFill)"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 1.2, delay: 0.8 }}
+      />
+      {/* Main path */}
+      <motion.path
+        d="M 20 140 C 60 130, 90 115, 120 100 S 180 70, 220 50 S 270 25, 295 15"
+        stroke="url(#chartGold)"
+        strokeWidth="3"
+        strokeLinecap="round"
+        initial={{ pathLength: 0, opacity: 0 }}
+        animate={{ pathLength: 1, opacity: 1 }}
+        transition={{ duration: 2, ease: "easeInOut", delay: 0.2 }}
+      />
+      {/* Milestone dots */}
+      {[
+        { cx: 20, cy: 140, delay: 0.3 },
+        { cx: 120, cy: 100, delay: 0.9 },
+        { cx: 220, cy: 50, delay: 1.5 },
+        { cx: 295, cy: 15, delay: 2.0 },
+      ].map((dot, i) => (
+        <motion.circle
+          key={i}
+          cx={dot.cx} cy={dot.cy} r="5"
+          fill="#FFD700"
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.4, delay: dot.delay }}
+        />
+      ))}
+      {/* Star at apex */}
+      <motion.g
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.5, delay: 2.3, type: "spring" }}
+      >
+        <path d="M 295 5 L 297 11 L 304 11 L 298 15 L 300 21 L 295 17 L 290 21 L 292 15 L 286 11 L 293 11 Z"
+          fill="#FFD700" />
+      </motion.g>
+      {/* Phase labels */}
+      {[
+        { x: 20, y: 155, label: "Start" },
+        { x: 120, y: 115, label: "Phase 2" },
+        { x: 220, y: 65, label: "Phase 3" },
+        { x: 280, y: 30, label: "Goal ✓" },
+      ].map((l, i) => (
+        <motion.text
+          key={i}
+          x={l.x} y={l.y}
+          textAnchor="middle"
+          fill="rgba(255,215,0,0.7)"
+          fontSize="8"
+          fontFamily="serif"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 + i * 0.3 }}
+        >
+          {l.label}
+        </motion.text>
+      ))}
+    </svg>
+    {/* Glow pulse at apex */}
+    <motion.div
+      className="absolute top-2 right-8 w-6 h-6 bg-bright-gold rounded-full blur-md"
+      animate={{ scale: [1, 1.8, 1], opacity: [0.6, 0.2, 0.6] }}
+      transition={{ duration: 2.5, repeat: Infinity, delay: 2.3 }}
+    />
+  </div>
+);
+
+/* ─── MARQUEE TICKER ─────────────────────────────────────── */
+const TICKER_ITEMS = [
+  "12-Month Roadmap", "IDR Milestones", "Wealth Archetypes",
+  "AI-Personalized", "4 Strategic Phases", "Weekly Action Plan",
+  "Risk Assessment", "Bibit & Bareksa", "Net Worth Projection",
+  "Built for Indonesia", "Zero Sign-Up", "Print & Export",
+];
+
+const MarqueeTicker = () => (
+  <div className="relative overflow-hidden py-3 bg-royal-gold/8 border-y border-royal-gold/15 dark:bg-royal-gold/5">
+    <div className="flex gap-8 animate-marquee whitespace-nowrap w-max">
+      {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
+        <span key={i} className="inline-flex items-center gap-2 text-xs tracking-widest text-royal-gold uppercase font-medium">
+          <span className="w-1 h-1 bg-royal-gold rounded-full" />
+          {item}
+        </span>
+      ))}
+    </div>
+  </div>
+);
 
 /* ─── FAQ ITEM ──────────────────────────────────────────── */
 function FAQItem({ question, answer }: { question: string; answer: string }) {
@@ -426,8 +553,31 @@ export default function Home() {
       {/* ── HEADER ── */}
       <header className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md bg-cream/80 dark:bg-dark-bg/80 border-b border-midnight/5 dark:border-cream/5 transition-colors duration-300">
         <div className="max-w-6xl mx-auto px-6 py-3.5 flex items-center justify-between">
-          <Logo />
-          <div className="flex items-center gap-3">
+          <button onClick={resetToLanding} className="focus:outline-none">
+            <Logo />
+          </button>
+          <div className="flex items-center gap-6">
+            {step === "landing" && (
+              <nav className="hidden md:flex items-center gap-6 text-sm">
+                {[
+                  { label: "How It Works", href: "#process" },
+                  { label: "Features", href: "#features" },
+                  { label: "FAQ", href: "#faq" },
+                ].map((link) => (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      document.querySelector(link.href)?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    className="text-midnight/55 dark:text-cream/45 hover:text-midnight dark:hover:text-cream transition-colors font-medium"
+                  >
+                    {link.label}
+                  </a>
+                ))}
+              </nav>
+            )}
             {step !== "landing" && (
               <button
                 onClick={resetToLanding}
@@ -435,6 +585,15 @@ export default function Home() {
               >
                 ← Start Over
               </button>
+            )}
+            {step === "landing" && (
+              <motion.button
+                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                onClick={() => setStep("form")}
+                className="hidden md:flex items-center gap-2 px-5 py-2 bg-midnight dark:bg-royal-gold text-cream dark:text-midnight text-sm font-semibold rounded-full hover:bg-deep-sea dark:hover:bg-bright-gold transition-colors"
+              >
+                Get Started <ArrowRight className="w-3.5 h-3.5" />
+              </motion.button>
             )}
             <ThemeToggle theme={theme} toggle={toggle} mounted={mounted} />
           </div>
@@ -505,7 +664,7 @@ export default function Home() {
 
                 <motion.div
                   variants={fadeUp} initial="hidden" animate="show" custom={3}
-                  className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16"
+                  className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10"
                 >
                   <motion.button
                     whileHover={{ scale: 1.04 }}
@@ -516,12 +675,19 @@ export default function Home() {
                     Build My Roadmap
                     <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                   </motion.button>
-                  <span className="text-cream/40 text-sm">Free · No sign-up · ~2 min</span>
+                  <span className="text-cream/40 text-sm">Free · No sign-up · ~30 seconds</span>
                 </motion.div>
 
-                {/* Stat pills */}
+                {/* Animated hero chart */}
                 <motion.div
                   variants={fadeUp} initial="hidden" animate="show" custom={4}
+                >
+                  <HeroChart />
+                </motion.div>
+
+                {/* Stat pills with animated counters */}
+                <motion.div
+                  variants={fadeUp} initial="hidden" animate="show" custom={5}
                   className="grid grid-cols-3 gap-3 max-w-lg mx-auto mb-20"
                 >
                   {STATS.map((s, i) => (
@@ -530,7 +696,9 @@ export default function Home() {
                       className="bg-cream/5 border border-cream/10 rounded-2xl p-4 backdrop-blur-sm text-center"
                     >
                       <s.icon className="w-5 h-5 text-royal-gold mx-auto mb-2" />
-                      <div className="text-cream font-semibold text-sm">{s.value}</div>
+                      <div className="text-cream font-bold text-lg">
+                        <AnimatedCounter to={s.to} suffix={s.suffix} />
+                      </div>
                       <div className="text-cream/50 text-[11px] mt-0.5">{s.label}</div>
                     </div>
                   ))}
@@ -572,8 +740,11 @@ export default function Home() {
               </div>
             </div>
 
+            {/* MARQUEE TICKER */}
+            <MarqueeTicker />
+
             {/* HOW IT WORKS */}
-            <div className="bg-cream dark:bg-dark-bg py-24 px-6">
+            <div id="process" className="bg-cream dark:bg-dark-bg py-24 px-6">
               <div className="max-w-4xl mx-auto">
                 <div className="text-center mb-14">
                   <span className="text-xs tracking-widest text-royal-gold uppercase">Process</span>
@@ -625,7 +796,7 @@ export default function Home() {
             </div>
 
             {/* WHAT YOU GET */}
-            <div className="bg-midnight py-24 px-6 relative overflow-hidden">
+            <div id="features" className="bg-midnight py-24 px-6 relative overflow-hidden">
               <div className="absolute inset-0 pointer-events-none">
                 <div className="absolute top-0 left-1/4 w-96 h-96 bg-royal-gold/5 rounded-full blur-3xl" />
                 <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-royal-gold/3 rounded-full blur-3xl" />
@@ -825,7 +996,7 @@ export default function Home() {
             </div>
 
             {/* FAQ */}
-            <div className="bg-cream dark:bg-dark-bg border-t border-midnight/5 dark:border-cream/5 py-24 px-6">
+            <div id="faq" className="bg-cream dark:bg-dark-bg border-t border-midnight/5 dark:border-cream/5 py-24 px-6">
               <div className="max-w-3xl mx-auto">
                 <div className="text-center mb-14">
                   <span className="text-xs tracking-widest text-royal-gold uppercase">FAQ</span>
