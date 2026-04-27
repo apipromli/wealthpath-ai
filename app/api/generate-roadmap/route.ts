@@ -90,32 +90,55 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://wealthpath-ai-apipromlis-projects.vercel.app",
-        "X-Title": "WealthPath AI",
-      },
-      body: JSON.stringify({
-        model: "meta-llama/llama-3.3-70b-instruct:free",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: buildUserPrompt(data) },
-        ],
-        max_tokens: 4096,
-        temperature: 0.7,
-      }),
-    });
+    /* Try models in order — skip to next on 429 rate-limit. */
+    const MODELS = [
+      "deepseek/deepseek-chat-v3-0324:free",
+      "google/gemma-3-27b-it:free",
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "mistralai/mistral-small-3.1-24b-instruct:free",
+    ];
 
-    if (!response.ok) {
-      const errBody = await response.text();
-      throw new Error(`OpenRouter error ${response.status}: ${errBody}`);
+    let json: Record<string, unknown> | null = null;
+    let lastError = "";
+
+    for (const model of MODELS) {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://wealthpath-ai-apipromlis-projects.vercel.app",
+          "X-Title": "WealthPath AI",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: buildUserPrompt(data) },
+          ],
+          max_tokens: 4096,
+          temperature: 0.7,
+        }),
+      });
+
+      if (response.status === 429) {
+        lastError = `${model} rate-limited`;
+        continue; // try next model
+      }
+
+      if (!response.ok) {
+        const errBody = await response.text();
+        throw new Error(`OpenRouter error ${response.status}: ${errBody}`);
+      }
+
+      json = await response.json();
+      break; // success
     }
 
-    const json = await response.json();
-    const rawText: string = json.choices?.[0]?.message?.content ?? "";
+    if (!json) throw new Error(`All models rate-limited. ${lastError}`);
+
+    const rawText: string =
+      (json.choices as Array<{ message: { content: string } }>)?.[0]?.message?.content ?? "";
 
     if (!rawText) throw new Error("Empty response from AI model");
 
