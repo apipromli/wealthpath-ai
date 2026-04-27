@@ -163,9 +163,13 @@ export async function POST(req: NextRequest) {
 
     /* ── 1. Try Google Gemini (fastest + most reliable free tier) ── */
     if (googleKey && !roadmap) {
-      for (const model of ["gemini-2.5-flash", "gemma-3-27b-it", "gemma-3-12b-it"]) {
+      const geminiModels = [
+        "gemini-2.5-flash", "gemini-2.5-flash",  /* retry once if 503 */
+        "gemma-3-27b-it", "gemma-3-12b-it", "gemma-3-4b-it",
+      ];
+      for (const model of geminiModels) {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 20000);
+        const timer = setTimeout(() => controller.abort(), 22000);
         try {
           const text = await callGemini(model, googleKey, userPrompt, controller.signal);
           if (text) { roadmap = extractRoadmap(text); if (roadmap) break; }
