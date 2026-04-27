@@ -95,15 +95,25 @@ async function callGemini(
   signal: AbortSignal
 ): Promise<string | null> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  /* Gemma models don't support systemInstruction — embed it in the user turn */
+  const isGemma = model.startsWith("gemma");
+  const body = isGemma
+    ? {
+        contents: [{ role: "user", parts: [{ text: SYSTEM_PROMPT + "\n\n" + userPrompt }] }],
+        generationConfig: { maxOutputTokens: 4096, temperature: 0.7 },
+      }
+    : {
+        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+        generationConfig: { maxOutputTokens: 4096, temperature: 0.7 },
+      };
+
   const res = await fetch(url, {
     method: "POST",
     signal,
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-      generationConfig: { maxOutputTokens: 4096, temperature: 0.7 },
-    }),
+    body: JSON.stringify(body),
   });
   if (res.status === 429 || res.status === 404 || !res.ok) return null;
   const json = await res.json() as Record<string, unknown>;
