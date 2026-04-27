@@ -919,9 +919,14 @@ export default function Home() {
                 <motion.div
                   initial={{ opacity: 0, y: -8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-xl text-red-700 dark:text-red-400 text-sm"
+                  className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-xl text-amber-800 dark:text-amber-300 text-sm leading-relaxed"
                 >
-                  {error}
+                  <strong className="block mb-1">
+                    {error.includes("busy") ? "⏳ AI sedang sibuk" : "❌ Terjadi kesalahan"}
+                  </strong>
+                  {error.includes("busy")
+                    ? "Semua model AI sedang dalam antrian. Tunggu ~1 menit lalu coba lagi — datamu sudah tersimpan di form."
+                    : error}
                 </motion.div>
               )}
 

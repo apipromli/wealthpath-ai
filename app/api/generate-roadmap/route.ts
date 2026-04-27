@@ -90,15 +90,31 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    /* Try models in order — skip on 429 (rate-limit) or 404 (unavailable). */
-    const MODELS = [
+    /* Large pool — shuffle so no single model is always hit first (avoids 429 clustering). */
+    const MODEL_POOL = [
+      "openai/gpt-oss-120b:free",
+      "openai/gpt-oss-20b:free",
       "google/gemma-4-31b-it:free",
+      "google/gemma-4-26b-a4b-it:free",
+      "nvidia/nemotron-3-super-120b-a12b:free",
       "qwen/qwen3-next-80b-a3b-instruct:free",
+      "minimax/minimax-m2.5:free",
+      "nvidia/nemotron-3-nano-30b-a3b:free",
+      "z-ai/glm-4.5-air:free",
       "google/gemma-3-27b-it:free",
       "nousresearch/hermes-3-llama-3.1-405b:free",
       "meta-llama/llama-3.3-70b-instruct:free",
-      "meta-llama/llama-3.2-3b-instruct:free",
+      "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
+      "google/gemma-3-12b-it:free",
+      "inclusionai/ling-2.6-flash:free",
+      "tencent/hy3-preview:free",
     ];
+    /* Fisher-Yates shuffle */
+    const MODELS = [...MODEL_POOL];
+    for (let i = MODELS.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [MODELS[i], MODELS[j]] = [MODELS[j], MODELS[i]];
+    }
 
     let json: Record<string, unknown> | null = null;
     let lastError = "";
@@ -132,14 +148,18 @@ export async function POST(req: NextRequest) {
       if (!response.ok) {
         const errBody = await response.text();
         lastError = `${model} error ${response.status}: ${errBody}`;
-        continue; // try next instead of throwing
+        continue;
       }
 
       json = await response.json();
-      break; // success — stop trying
+      break;
     }
 
-    if (!json) throw new Error(`All models unavailable. Last: ${lastError}`);
+    if (!json) {
+      throw new Error(
+        "AI servers are currently busy — please try again in about a minute."
+      );
+    }
 
     const rawText: string =
       (json.choices as Array<{ message: { content: string } }>)?.[0]?.message?.content ?? "";
