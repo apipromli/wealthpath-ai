@@ -71,6 +71,26 @@ function buildUserPrompt(data: RoadmapInput): string {
 Output only valid JSON. No markdown, no extra text. Start your response with { and end with }.`;
 }
 
+type ModelCandidate = { url: string; model: string; authHeader: string };
+
+function parseRoadmap(rawText: string): Record<string, unknown> | null {
+  const cleaned = rawText
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
+
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start === -1 || end === -1) return null;
+
+  try {
+    return JSON.parse(cleaned.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const data: RoadmapInput = await req.json();
@@ -82,59 +102,82 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) {
+    const groqKey = process.env.GROQ_API_KEY;
+    const openrouterKey = process.env.OPENROUTER_API_KEY;
+
+    if (!groqKey && !openrouterKey) {
       return NextResponse.json(
-        { error: "OPENROUTER_API_KEY is not configured on the server." },
+        { error: "No AI API key configured on the server." },
         { status: 500 }
       );
     }
 
-    /* Large pool — shuffle so load spreads randomly across models. */
-    const MODEL_POOL = [
-      "openai/gpt-oss-120b:free",
-      "openai/gpt-oss-20b:free",
-      "google/gemma-4-31b-it:free",
-      "google/gemma-4-26b-a4b-it:free",
-      "nvidia/nemotron-3-super-120b-a12b:free",
-      "qwen/qwen3-next-80b-a3b-instruct:free",
-      "minimax/minimax-m2.5:free",
-      "nvidia/nemotron-3-nano-30b-a3b:free",
-      "z-ai/glm-4.5-air:free",
-      "google/gemma-3-27b-it:free",
-      "nousresearch/hermes-3-llama-3.1-405b:free",
-      "meta-llama/llama-3.3-70b-instruct:free",
-      "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
-      "google/gemma-3-12b-it:free",
-    ];
+    /* Build candidate list: Groq first (fast + reliable), then OpenRouter fallback */
+    const candidates: ModelCandidate[] = [];
 
-    /* Fisher-Yates shuffle */
-    const MODELS = [...MODEL_POOL];
-    for (let i = MODELS.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [MODELS[i], MODELS[j]] = [MODELS[j], MODELS[i]];
+    if (groqKey) {
+      for (const model of [
+        "llama-3.3-70b-versatile",
+        "llama3-70b-8192",
+        "gemma2-9b-it",
+        "llama-3.1-8b-instant",
+      ]) {
+        candidates.push({
+          url: "https://api.groq.com/openai/v1/chat/completions",
+          model,
+          authHeader: `Bearer ${groqKey}`,
+        });
+      }
     }
 
-    /* Try at most 6 models to stay well within Vercel's 60s limit. */
-    const CANDIDATES = MODELS.slice(0, 6);
+    if (openrouterKey) {
+      const OR_POOL = [
+        "openai/gpt-oss-120b:free",
+        "openai/gpt-oss-20b:free",
+        "google/gemma-4-31b-it:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "qwen/qwen3-next-80b-a3b-instruct:free",
+        "google/gemma-3-27b-it:free",
+        "nousresearch/hermes-3-llama-3.1-405b:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemma-3-12b-it:free",
+      ];
+      /* Shuffle OpenRouter pool */
+      for (let i = OR_POOL.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [OR_POOL[i], OR_POOL[j]] = [OR_POOL[j], OR_POOL[i]];
+      }
+      for (const model of OR_POOL.slice(0, 5)) {
+        candidates.push({
+          url: "https://openrouter.ai/api/v1/chat/completions",
+          model,
+          authHeader: `Bearer ${openrouterKey}`,
+        });
+      }
+    }
 
     let roadmap: Record<string, unknown> | null = null;
     let lastError = "";
 
-    for (const model of CANDIDATES) {
-      /* Per-request 25s timeout — prevents one slow model from eating the budget. */
+    for (const { url, model, authHeader } of candidates) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 25000);
+      const timer = setTimeout(() => controller.abort(), 28000);
 
       try {
-        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        const extraHeaders: Record<string, string> = url.includes("openrouter")
+          ? {
+              "HTTP-Referer": "https://wealthpath-ai-apipromlis-projects.vercel.app",
+              "X-Title": "WealthPath AI",
+            }
+          : {};
+
+        const response = await fetch(url, {
           method: "POST",
           signal: controller.signal,
           headers: {
-            "Authorization": `Bearer ${apiKey}`,
+            Authorization: authHeader,
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://wealthpath-ai-apipromlis-projects.vercel.app",
-            "X-Title": "WealthPath AI",
+            ...extraHeaders,
           },
           body: JSON.stringify({
             model,
@@ -147,7 +190,6 @@ export async function POST(req: NextRequest) {
           }),
         });
 
-        /* Skip rate-limited or missing models */
         if (response.status === 429 || response.status === 404) {
           lastError = `${model} unavailable (${response.status})`;
           continue;
@@ -162,32 +204,15 @@ export async function POST(req: NextRequest) {
         const rawText: string =
           (json.choices as Array<{ message: { content: string } }>)?.[0]?.message?.content ?? "";
 
-        if (!rawText) { lastError = `${model} returned empty content`; continue; }
+        if (!rawText) { lastError = `${model} empty response`; continue; }
 
-        /* Strip markdown fences and extract JSON */
-        const cleaned = rawText
-          .replace(/^```json\s*/i, "")
-          .replace(/^```\s*/i, "")
-          .replace(/```\s*$/i, "")
-          .trim();
+        const parsed = parseRoadmap(rawText);
+        if (!parsed) { lastError = `${model} returned invalid JSON`; continue; }
 
-        /* Find the JSON object even if the model added preamble text */
-        const jsonStart = cleaned.indexOf("{");
-        const jsonEnd = cleaned.lastIndexOf("}");
-        if (jsonStart === -1 || jsonEnd === -1) {
-          lastError = `${model} did not return JSON`;
-          continue;
-        }
-
-        try {
-          roadmap = JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1));
-          break; /* success */
-        } catch {
-          lastError = `${model} returned malformed JSON`;
-          continue;
-        }
-      } catch (fetchErr) {
-        lastError = `${model} timed out or network error`;
+        roadmap = parsed;
+        break;
+      } catch {
+        lastError = `${model} timed out`;
         continue;
       } finally {
         clearTimeout(timer);
