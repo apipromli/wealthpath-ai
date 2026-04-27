@@ -174,7 +174,7 @@ export async function POST(req: NextRequest) {
 
     for (const { url, model, authHeader } of candidates) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 28000);
+      const timer = setTimeout(() => controller.abort(), 20000);
 
       try {
         const extraHeaders: Record<string, string> = url.includes("openrouter")

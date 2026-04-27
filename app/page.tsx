@@ -351,9 +351,17 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
-      const data = await res.json();
+      if (res.status === 504) {
+        throw new Error("AI servers are currently busy — please try again in about a minute.");
+      }
+      let data: { error?: string; roadmap?: Roadmap };
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error("AI servers are currently busy — please try again in about a minute.");
+      }
       if (!res.ok) throw new Error(data.error || "Failed to generate roadmap");
-      setRoadmap(data.roadmap);
+      setRoadmap(data.roadmap!);
       setStep("result");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e: unknown) {
