@@ -102,25 +102,39 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const googleKey = process.env.GOOGLE_AI_KEY;
     const groqKey = process.env.GROQ_API_KEY;
     const openrouterKey = process.env.OPENROUTER_API_KEY;
 
-    if (!groqKey && !openrouterKey) {
+    if (!googleKey && !groqKey && !openrouterKey) {
       return NextResponse.json(
         { error: "No AI API key configured on the server." },
         { status: 500 }
       );
     }
 
-    /* Build candidate list: Groq first (fast + reliable), then OpenRouter fallback */
+    /* Build candidate list: Google Gemini first, then Groq, then OpenRouter */
     const candidates: ModelCandidate[] = [];
+
+    if (googleKey) {
+      for (const model of [
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-8b",
+      ]) {
+        candidates.push({
+          url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+          model,
+          authHeader: `Bearer ${googleKey}`,
+        });
+      }
+    }
 
     if (groqKey) {
       for (const model of [
         "llama-3.3-70b-versatile",
         "llama3-70b-8192",
         "gemma2-9b-it",
-        "llama-3.1-8b-instant",
       ]) {
         candidates.push({
           url: "https://api.groq.com/openai/v1/chat/completions",
@@ -142,12 +156,11 @@ export async function POST(req: NextRequest) {
         "meta-llama/llama-3.3-70b-instruct:free",
         "google/gemma-3-12b-it:free",
       ];
-      /* Shuffle OpenRouter pool */
       for (let i = OR_POOL.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [OR_POOL[i], OR_POOL[j]] = [OR_POOL[j], OR_POOL[i]];
       }
-      for (const model of OR_POOL.slice(0, 5)) {
+      for (const model of OR_POOL.slice(0, 4)) {
         candidates.push({
           url: "https://openrouter.ai/api/v1/chat/completions",
           model,
@@ -169,7 +182,7 @@ export async function POST(req: NextRequest) {
               "HTTP-Referer": "https://wealthpath-ai-apipromlis-projects.vercel.app",
               "X-Title": "WealthPath AI",
             }
-          : {};
+          : {}; /* Google & Groq need no extra headers */
 
         const response = await fetch(url, {
           method: "POST",
