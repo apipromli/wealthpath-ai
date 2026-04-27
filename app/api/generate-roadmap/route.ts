@@ -161,28 +161,36 @@ export async function POST(req: NextRequest) {
     const userPrompt = buildUserPrompt(data);
     let roadmap: Record<string, unknown> | null = null;
 
-    /* ── 1. Try Google Gemini (fastest + most reliable free tier) ── */
+    /*
+     * Total Vercel budget: 60s.
+     * Strategy (timed to fit within 55s worst-case):
+     *   1. gemma-3-12b-it  — 20s  (fast: ~15s for full roadmap, confirmed working)
+     *   2. gemma-3-4b-it   — 18s  (faster fallback)
+     *   3. OpenRouter x2   —  8s each  (quick 429 check, skip if rate-limited)
+     * Worst-case total: 20+18+8+8 = 54s  ✓
+     */
+
+    /* ── 1. Gemini: fast non-thinking models only ── */
     if (googleKey && !roadmap) {
-      const geminiModels = [
-        "gemini-2.5-flash", "gemini-2.5-flash",  /* retry once if 503 */
-        "gemma-3-27b-it", "gemma-3-12b-it", "gemma-3-4b-it",
-      ];
-      for (const model of geminiModels) {
+      for (const [model, ms] of [
+        ["gemma-3-12b-it", 20000],
+        ["gemma-3-4b-it",  18000],
+      ] as [string, number][]) {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 22000);
+        const timer = setTimeout(() => controller.abort(), ms);
         try {
           const text = await callGemini(model, googleKey, userPrompt, controller.signal);
           if (text) { roadmap = extractRoadmap(text); if (roadmap) break; }
-        } catch { /* timeout or network — try next */ }
+        } catch { /* timeout — try next */ }
         finally { clearTimeout(timer); }
       }
     }
 
-    /* ── 2. Try Groq ── */
+    /* ── 2. Groq (if key exists) ── */
     if (groqKey && !roadmap) {
-      for (const model of ["llama-3.3-70b-versatile", "llama3-70b-8192", "gemma2-9b-it"]) {
+      for (const model of ["llama-3.3-70b-versatile", "gemma2-9b-it"]) {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 20000);
+        const timer = setTimeout(() => controller.abort(), 18000);
         try {
           const text = await callOpenAICompat(
             "https://api.groq.com/openai/v1/chat/completions",
@@ -194,21 +202,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    /* ── 3. OpenRouter fallback ── */
+    /* ── 3. OpenRouter fallback (2 models max, 8s each — mainly for 429 skip) ── */
     if (openrouterKey && !roadmap) {
       const OR_POOL = [
-        "openai/gpt-oss-120b:free", "openai/gpt-oss-20b:free",
-        "google/gemma-4-31b-it:free", "qwen/qwen3-next-80b-a3b-instruct:free",
-        "google/gemma-3-27b-it:free", "nousresearch/hermes-3-llama-3.1-405b:free",
-        "meta-llama/llama-3.3-70b-instruct:free",
+        "openai/gpt-oss-20b:free", "google/gemma-4-31b-it:free",
+        "openai/gpt-oss-120b:free", "google/gemma-3-12b-it:free",
       ];
       for (let i = OR_POOL.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [OR_POOL[i], OR_POOL[j]] = [OR_POOL[j], OR_POOL[i]];
       }
-      for (const model of OR_POOL.slice(0, 4)) {
+      for (const model of OR_POOL.slice(0, 2)) {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 18000);
+        const timer = setTimeout(() => controller.abort(), 8000);
         try {
           const text = await callOpenAICompat(
             "https://openrouter.ai/api/v1/chat/completions",
